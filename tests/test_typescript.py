@@ -37,7 +37,8 @@ function outer() {
         ("demo.box", "choose", 7),
         ("demo.box.Box", "open", 2),
         ("demo.box", "arrow", 2),
-        ("demo.box", "outer", 2),
+        ("demo.box", "outer", 1),
+        ("demo.box.outer", "inner", 2),
     ]
 
 
@@ -113,6 +114,74 @@ function outer() {
 """
     functions = functions_in_source(source, "src/demo/box.ts", "/proj")
     assert [(fn.name, fn.complexity) for fn in functions] == [("outer", 2)]
+
+
+def test_named_functions_inside_a_factory_are_entries_and_leave_the_parent():
+    source = """
+export function createHistory(ready: boolean) {
+  function isOpen(): boolean {
+    return ready && open;
+  }
+  const close = (force?: boolean) => {
+    if (force) return;
+    const decided = (discard: boolean) => (discard ? 1 : 0);
+    return decided(isOpen());
+  };
+  const label = ready ? "on" : "off";
+  return { isOpen, close, label };
+}
+
+export const createStore = () => {
+  function read() {
+    return cache ?? load();
+  }
+  return { read };
+};
+"""
+    functions = functions_in_source(source, "src/demo/history.ts", "/proj")
+    assert [(fn.namespace, fn.name, fn.complexity) for fn in functions] == [
+        ("demo.history", "createHistory", 2),
+        ("demo.history.createHistory", "isOpen", 2),
+        ("demo.history.createHistory", "close", 2),
+        ("demo.history.createHistory.close", "decided", 2),
+        ("demo.history", "createStore", 1),
+        ("demo.history.createStore", "read", 2),
+    ]
+
+
+def test_a_class_method_s_named_helper_is_an_entry_under_the_method():
+    source = """
+export class Box {
+  open(flag: boolean): number {
+    function pick() {
+      return flag ? 1 : 0;
+    }
+    return pick();
+  }
+}
+"""
+    functions = functions_in_source(source, "src/demo/box.ts", "/proj")
+    assert [(fn.namespace, fn.name, fn.complexity) for fn in functions] == [
+        ("demo.box.Box", "open", 1),
+        ("demo.box.Box.open", "pick", 2),
+    ]
+
+
+def test_a_named_function_inside_an_anonymous_callback_stays_inside():
+    source = """
+function outer(items: number[]) {
+  return items.map((n) => {
+    function pick() {
+      return n ? 1 : 0;
+    }
+    return pick();
+  });
+}
+"""
+    functions = functions_in_source(source, "src/demo/box.ts", "/proj")
+    assert [(fn.namespace, fn.name, fn.complexity) for fn in functions] == [
+        ("demo.box", "outer", 2),
+    ]
 
 
 def test_javascript_files_use_the_same_rules():

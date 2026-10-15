@@ -3,9 +3,13 @@
 Decision points follow the same structural rule as crap4java: `if`, loops,
 `catch`, `?:`, each `switch` case (including `default`), `&&` / `||`, and the
 nullish operators `??` and `?.`. Top-level functions and class methods are
-entries. An inline Express route callback (`app.get("/users", handler)` and
-the same methods on a router, including `use` and `route().get`) is its own
-entry, named `GET /users`. Other nested callbacks stay inside the enclosing
+entries. A named function inside one of those (`function f`, or `const f =
+() => ...`) is its own entry too, namespaced under its encloser
+(`module.outer`, `module.Class.method`), so a factory that returns closures
+is scored closure by closure. An inline Express route callback
+(`app.get("/users", handler)` and the same methods on a router, including
+`use` and `route().get`) is its own entry, named `GET /users`. Other nested
+callbacks, and anything declared inside them, stay inside the enclosing
 function. A class method's namespace is `module.Class`, which is the
 uml-viewer class key. `.js`, `.mjs`, `.cjs`, and `.jsx` use the JavaScript
 grammar and these same rules.
@@ -116,13 +120,37 @@ def _module_namespace(path: str, source_root: str | None) -> str:
     return _strip_script_suffix(relative).replace("/", ".")
 
 
-def _inside_function(node) -> bool:
+def _enclosing_function(node):
     current = node.parent
     while current is not None:
         if current.type in _FUNCTION_TYPES:
-            return True
+            return current
         current = current.parent
-    return False
+    return None
+
+
+def _declared_name(data: bytes, node) -> str | None:
+    """Name of a function node that is declared by name, or None."""
+
+    if node.type in {"function_declaration", "method_definition"}:
+        if not _has_body(node):
+            return None
+        ident = child_of_type(node, "identifier", "property_identifier")
+    elif node.type in _CALLBACKS:
+        declarator = node.parent
+        if (
+            declarator is None
+            or declarator.type != "variable_declarator"
+            or declarator.parent is None
+            or declarator.parent.type != "lexical_declaration"
+        ):
+            return None
+        ident = child_of_type(declarator, "identifier")
+    else:
+        return None
+    if ident is None:
+        return None
+    return node_text(data, ident)
 
 
 def _class_names(data: bytes, node) -> list[str]:
@@ -247,13 +275,42 @@ def _is_route_callback(data: bytes, node) -> bool:
     return _route_method(data, call) is not None
 
 
+def _namespace(data: bytes, node, module: str) -> str | None:
+    """Namespace of a named function's entry, or None when it has no entry.
+
+    A method is keyed by its classes. Any other function is keyed by the
+    chain of named functions around it, and has no entry when one link of
+    that chain is anonymous.
+    """
+
+    if node.type == "method_definition":
+        classes = _class_names(data, node)
+        if not classes:
+            return None
+        return f"{module}.{'.'.join(classes)}"
+    parent = _enclosing_function(node)
+    if parent is None:
+        return module
+    name = _declared_name(data, parent)
+    if name is None:
+        return None
+    outer = _namespace(data, parent, module)
+    if outer is None:
+        return None
+    return f"{outer}.{name}"
+
+
+def _is_entry(data: bytes, node) -> bool:
+    return _declared_name(data, node) is not None and _namespace(data, node, "") is not None
+
+
 def _complexity(data: bytes, node) -> int:
     root_id = node.id
 
     def skip(current) -> bool:
         if current.id == root_id:
             return False
-        return _skip(current) or _is_route_callback(data, current)
+        return _skip(current) or _is_route_callback(data, current) or _is_entry(data, current)
 
     return complexity(node, _is_decision, skip)
 
@@ -267,66 +324,35 @@ def _append(found: list, node, **kwargs) -> None:
     )
 
 
-def _append_function(found, data, node, module, path) -> None:
-    if _inside_function(node) or not _has_body(node):
+def _append_named(found, data, node, span, module, path) -> None:
+    """Append `node` as an entry over `span` when it has one."""
+
+    name = _declared_name(data, node)
+    if name is None:
         return
-    ident = child_of_type(node, "identifier")
-    if ident is None:
+    namespace = _namespace(data, node, module)
+    if namespace is None:
         return
     _append(
         found,
-        node,
-        name=node_text(data, ident),
-        namespace=module,
+        span,
+        name=name,
+        namespace=namespace,
         complexity=_complexity(data, node),
-        start_line=start_line(node),
-        end_line=end_line(node),
-        path=path,
-        language="typescript",
-    )
-
-
-def _append_method(found, data, node, module, path) -> None:
-    if not _has_body(node):
-        return
-    ident = child_of_type(node, "property_identifier", "identifier")
-    classes = _class_names(data, node)
-    if ident is None or not classes:
-        return
-    _append(
-        found,
-        node,
-        name=node_text(data, ident),
-        namespace=f"{module}.{'.'.join(classes)}",
-        complexity=_complexity(data, node),
-        start_line=start_line(node),
-        end_line=end_line(node),
+        start_line=start_line(span),
+        end_line=end_line(span),
         path=path,
         language="typescript",
     )
 
 
 def _append_arrows(found, data, node, module, path) -> None:
-    if _inside_function(node):
-        return
     for declarator in node.children:
         if declarator.type != "variable_declarator":
             continue
-        ident = child_of_type(declarator, "identifier")
         value = child_of_type(declarator, "arrow_function", "function_expression")
-        if ident is None or value is None:
-            continue
-        _append(
-            found,
-            declarator,
-            name=node_text(data, ident),
-            namespace=module,
-            complexity=_complexity(data, value),
-            start_line=start_line(declarator),
-            end_line=end_line(declarator),
-            path=path,
-            language="typescript",
-        )
+        if value is not None:
+            _append_named(found, data, value, declarator, module, path)
 
 
 def _route_label(method: str, path: str | None) -> str:
@@ -386,10 +412,8 @@ def functions_in_source(
     found: list[tuple[int, Function]] = []
     routes: list[tuple[int, object, str, str | None]] = []
     for node in descendants(tree.root_node):
-        if node.type == "function_declaration":
-            _append_function(found, data, node, module, path)
-        elif node.type == "method_definition":
-            _append_method(found, data, node, module, path)
+        if node.type in {"function_declaration", "method_definition"}:
+            _append_named(found, data, node, node, module, path)
         elif node.type == "lexical_declaration":
             _append_arrows(found, data, node, module, path)
         elif node.type == "call_expression":
