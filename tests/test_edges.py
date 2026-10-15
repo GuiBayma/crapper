@@ -362,3 +362,23 @@ def test_source_discovery_skips_sveltekit_output(tmp_path):
     generated.write_text("export function compiled() { return 1; }\n", encoding="utf-8")
 
     assert iter_source_files([tmp_path]) == [source.resolve()]
+
+
+def test_source_discovery_skips_every_dot_directory(tmp_path):
+    source = tmp_path / "src" / "app.ts"
+    source.parent.mkdir()
+    source.write_text("export function page() { return 1; }\n", encoding="utf-8")
+    for folder in (".next/server", ".nuxt", ".astro", ".turbo/cache"):
+        generated = tmp_path / folder / "chunk.js"
+        generated.parent.mkdir(parents=True)
+        generated.write_text("export function compiled() { return 1; }\n", encoding="utf-8")
+
+    assert iter_source_files([tmp_path]) == [source.resolve()]
+
+
+def test_a_dot_directory_named_as_the_root_is_walked(tmp_path):
+    script = tmp_path / ".github" / "scripts" / "release.js"
+    script.parent.mkdir(parents=True)
+    script.write_text("export function release() { return 1; }\n", encoding="utf-8")
+
+    assert iter_source_files([tmp_path / ".github"]) == [script.resolve()]

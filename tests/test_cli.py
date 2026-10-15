@@ -159,7 +159,7 @@ def test_help_and_unknown_option(capsys):
     assert run(["--help"]) == 0
     help_text = capsys.readouterr().out
     assert "uml-viewer" in help_text
-    assert ".clj-kondo" in help_text
+    assert "starts with a dot" in help_text
     assert ".test.cts" in help_text
     assert run(["--not-an-option"]) == 1
     assert run(["--root"]) == 1
@@ -367,6 +367,27 @@ def test_changed_files_from_a_real_git_status(tmp_path):
     assert "Outside" not in nested
     assert "Cafe" not in nested
     assert "New" not in nested
+
+
+def test_changed_skips_generated_directories_git_reports(tmp_path):
+    _git = ["git", "-C", str(tmp_path)]
+    subprocess.run([*_git, "init"], check=True, capture_output=True)
+    (tmp_path / "app.go").write_text("package demo\nfunc App() int { return 1 }\n", encoding="utf-8")
+    for folder, name in ((".svelte-kit/output", "Kit"), ("dist", "Dist")):
+        generated = tmp_path / folder / "gen.go"
+        generated.parent.mkdir(parents=True)
+        generated.write_text(f"package demo\nfunc {name}() int {{ return 1 }}\n", encoding="utf-8")
+
+    assert run(["--root", str(tmp_path), "--no-coverage", "--changed"]) == 0
+    text = (tmp_path / ".metrics" / "crap.edn").read_text(encoding="utf-8")
+    assert ':name "App"' in text
+    assert "Kit" not in text
+    assert "Dist" not in text
+
+    kit = tmp_path / ".svelte-kit"
+    assert run(["--root", str(kit), "--no-coverage", "--changed"]) == 0
+    inside = (kit / ".metrics" / "crap.edn").read_text(encoding="utf-8")
+    assert ':name "Kit"' in inside
 
 
 def test_changed_outside_a_repository_returns_gits_status(tmp_path, capsys):
