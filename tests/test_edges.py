@@ -351,3 +351,14 @@ def test_rust_relative_path_and_a_trait_method(tmp_path):
     path = tmp_path / "src" / "lib.rs"
     functions = rust_functions(source, str(path), str(tmp_path))
     assert [(fn.namespace, fn.name) for fn in functions] == [("demo", "draw")]
+
+
+def test_source_discovery_skips_sveltekit_output(tmp_path):
+    source = tmp_path / "src" / "app.ts"
+    source.parent.mkdir()
+    source.write_text("export function page() { return 1; }\n", encoding="utf-8")
+    generated = tmp_path / ".svelte-kit" / "output" / "server.js"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("export function compiled() { return 1; }\n", encoding="utf-8")
+
+    assert iter_source_files([tmp_path]) == [source.resolve()]
