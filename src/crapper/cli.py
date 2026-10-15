@@ -15,6 +15,7 @@ from crapper.discover import (
     JS_TEST_SUFFIXES,
     SKIP_DIRS,
     TEST_DIRS,
+    in_skipped_dir,
     is_test_file,
     iter_source_files,
     language_of,
@@ -67,7 +68,8 @@ Arguments:
                     path contains this text are analyzed.
 
 With no paths, source files under the project root are analyzed. Directories
-named {_SKIPPED_DIRS} are skipped, as are {_TEST_PATTERNS}.
+whose name starts with a dot or is one of {_SKIPPED_DIRS} are skipped, as are
+{_TEST_PATTERNS}.
 
 Coverage, when it is produced:
   Clojure      clj -M:cov --lcov, then Cloverage form counts or LCOV
@@ -234,10 +236,13 @@ def _positionals(root: Path, args: list[str]) -> tuple[list[Path], list[str]]:
 
 
 def _changed_source(root: Path) -> list[Path]:
+    limit = root.resolve()
     return [
         path
         for path in _changed_files(root)
-        if language_of(path) is not None and not is_test_file(path)
+        if language_of(path) is not None
+        and not is_test_file(path)
+        and not in_skipped_dir(path, limit)
     ]
 
 

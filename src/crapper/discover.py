@@ -22,13 +22,9 @@ EXTENSIONS = {
     ".py": "python",
 }
 
+# Directories whose name starts with a dot are skipped too: they hold VCS data,
+# editor settings, and framework output such as .svelte-kit, .next, and .nuxt.
 SKIP_DIRS = {
-    ".git",
-    ".svelte-kit",
-    ".hg",
-    ".svn",
-    ".idea",
-    ".venv",
     "venv",
     "node_modules",
     "vendor",
@@ -37,10 +33,8 @@ SKIP_DIRS = {
     "build",
     "out",
     "coverage",
-    ".metrics",
     "testdata",
     "__pycache__",
-    ".clj-kondo",
 }
 
 TEST_DIRS = {"test", "tests", "spec", "specs", "__tests__"}
@@ -91,6 +85,16 @@ def is_test_file(path: str | Path) -> bool:
     return any(part in TEST_DIRS for part in file_path.parts)
 
 
+def is_skipped_dir(name: str) -> bool:
+    return name.startswith(".") or name in SKIP_DIRS
+
+
+def in_skipped_dir(path: Path, root: Path) -> bool:
+    """Whether a directory between `root` and `path` is one a walk skips."""
+
+    return any(is_skipped_dir(name) for name in path.relative_to(root).parent.parts)
+
+
 def _walk(root: Path) -> list[Path]:
     if not root.exists():
         return []
@@ -99,7 +103,7 @@ def _walk(root: Path) -> list[Path]:
     found: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
-            name for name in dirnames if name not in SKIP_DIRS and name not in TEST_DIRS
+            name for name in dirnames if not is_skipped_dir(name) and name not in TEST_DIRS
         ]
         for name in filenames:
             path = Path(dirpath) / name
