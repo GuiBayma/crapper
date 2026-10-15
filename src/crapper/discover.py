@@ -24,6 +24,7 @@ EXTENSIONS = {
 
 SKIP_DIRS = {
     ".git",
+    ".svelte-kit",
     ".hg",
     ".svn",
     ".idea",
