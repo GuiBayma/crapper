@@ -420,3 +420,135 @@ def test_main_exits_with_the_status(monkeypatch):
         assert exc.code == 4
     else:
         raise AssertionError("main did not exit")
+
+
+@pytest.mark.parametrize("extension", ["js", "ts", "py"])
+def test_report_lists_uncovered_line_ranges_per_function(
+    tmp_path, capsys, extension
+):
+    source = (
+        "def choose(x):\n"
+        "    if x:\n"
+        "        x += 1\n"
+        "        return x\n"
+        "    return 0\n"
+        "\n"
+        "def covered():\n"
+        "    return 1\n"
+    ) if extension == "py" else (
+        "export function choose(x) {\n"
+        "  if (x) {\n"
+        "    x += 1;\n"
+        "    return x;\n"
+        "  } return 0;\n"
+        "}\n"
+        "export function covered() {\n"
+        "  return 1;\n"
+        "}\n"
+    )
+    path = f"src/demo/core.{extension}"
+    _write(tmp_path, path, source)
+    _write(
+        tmp_path, "coverage/lcov.info",
+        f"SF:{path}\nFN:1,choose\nFN:7,covered\n"
+        "DA:99,0\nDA:5,0\nDA:4,0\nDA:3,1\nDA:2,0\nDA:1,1\n"
+        "DA:7,1\nDA:8,1\nend_of_record\n",
+    )
+
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    output = capsys.readouterr().out
+    details = [line for line in output.splitlines() if "Uncovered lines:" in line]
+    assert details == [f"  Uncovered lines: {path}:2, 4-5"]
+    lines = output.splitlines()
+    assert lines[lines.index(details[0]) - 1].startswith("choose ")
+
+
+@pytest.mark.parametrize("taken", ["0", "-"])
+def test_report_identifies_lines_with_uncovered_branches(tmp_path, capsys, taken):
+    _write(
+        tmp_path, "src/choose.ts",
+        "export function choose(x) {\n  return x ? 1 : 0;\n}\n",
+    )
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:src/choose.ts\nDA:1,1\nDA:2,1\nDA:3,1\n"
+        f"BRDA:2,0,0,1\nBRDA:2,0,1,{taken}\nBRDA:99,0,0,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    output = capsys.readouterr().out
+    assert "  Uncovered lines: src/choose.ts:2\n" in output
+
+
+@pytest.mark.parametrize("language, native_report", [
+    ("go", False), ("go", True), ("java", False), ("java", True),
+    ("clojure", True),
+])
+def test_report_ignores_lcov_details_when_another_coverage_source_is_selected(
+    tmp_path, capsys, language, native_report
+):
+    fixtures = {
+        "go": (
+            "main.go", "package demo\nfunc Choose() int { return 1 }\n",
+            "target/coverage/go/coverage.out",
+            "mode: set\nmain.go:2.1,2.40 1 1\n",
+        ),
+        "java": (
+            "Main.java", "public class Main {\n  public int choose() { return 1; }\n}\n",
+            "target/site/jacoco/jacoco.xml",
+            '<report><class name="Main"><method name="choose" line="2">'
+            '<counter type="INSTRUCTION" missed="0" covered="1"/>'
+            '</method></class></report>',
+        ),
+        "clojure": (
+            "main.clj", "(ns demo)\n(defn choose [] 1)\n",
+            "target/coverage/main.clj.html",
+            '<span title="1 out of 1 forms covered">   2&nbsp;</span>',
+        ),
+    }
+    path, source, report_path, report = fixtures[language]
+    _write(tmp_path, path, source)
+    _write(tmp_path, "coverage/lcov.info", f"SF:{path}\nDA:2,0\nend_of_record\n")
+    if native_report:
+        _write(tmp_path, report_path, report)
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_line_details_when_coverage_is_disabled(tmp_path, capsys):
+    _write(tmp_path, "choose.py", "def choose():\n    return 1\n")
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:choose.py\nDA:2,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--no-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_line_details_without_matching_lcov(tmp_path, capsys):
+    _write(tmp_path, "choose.py", "def choose():\n    return 1\n")
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:other.py\nDA:2,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_details_when_every_branch_is_covered(tmp_path, capsys):
+    _write(
+        tmp_path, "src/choose.js",
+        "export function choose(x) {\n"
+        "  if (x) x += 1;\n"
+        "  [].map(() => {\n"
+        "    return 0;\n"
+        "  });\n"
+        "  return x;\n"
+        "}\n",
+    )
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:src/choose.js\nDA:1,1\nDA:2,2\nDA:3,1\nDA:4,0\nDA:6,1\n"
+        "BRDA:2,0,0,1\nBRDA:2,0,1,1\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out

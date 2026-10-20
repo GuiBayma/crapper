@@ -170,7 +170,7 @@ def test_a_short_report_key_matches_one_longer_source():
 
 
 def test_suffix_lookup_finds_a_report_keyed_by_a_longer_path():
-    bundle = CoverageBundle(lcov={"proj/src/demo/core.clj": {3: (1, 1), 4: (0, 1)}})
+    bundle = CoverageBundle(lcov=parse_lcov("SF:proj/src/demo/core.clj\nDA:3,1\nDA:4,0\nend_of_record\n"))
     fn = function(
         language="clojure",
         path="src/demo/core.clj",
@@ -215,7 +215,7 @@ def test_missing_coverage_scores_zero_and_sorts_ahead_of_a_covered_function(tmp_
     body = "export function {name}(x: number) {{\n  if (x) return 1;\n  return 0;\n}}\n"
     low.write_text(body.format(name="low"), encoding="utf-8")
     high.write_text(body.format(name="high"), encoding="utf-8")
-    bundle = CoverageBundle(lcov={"src/low.ts": {1: (1, 1), 2: (1, 1), 3: (1, 1)}})
+    bundle = CoverageBundle(lcov=parse_lcov("SF:src/low.ts\nDA:1,1\nDA:2,1\nDA:3,1\nend_of_record\n"))
     entries = analyze_files([low, high], tmp_path, bundle)
     assert [(entry.name, entry.coverage, entry.crap) for entry in entries] == [
         ("high", 0.0, 6.0),
