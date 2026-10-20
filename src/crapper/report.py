@@ -13,6 +13,10 @@ def _format_crap(score: float | None) -> str:
     return f"{score:8.1f}"
 
 
+def _format_line_range(start: int, end: int) -> str:
+    return str(start) if start == end else f"{start}-{end}"
+
+
 def _format_line_ranges(lines: tuple[int, ...]) -> str:
     ranges: list[str] = []
     start = end = lines[0]
@@ -20,9 +24,9 @@ def _format_line_ranges(lines: tuple[int, ...]) -> str:
         if line == end + 1:
             end = line
             continue
-        ranges.append(str(start) if start == end else f"{start}-{end}")
+        ranges.append(_format_line_range(start, end))
         start = end = line
-    ranges.append(str(start) if start == end else f"{start}-{end}")
+    ranges.append(_format_line_range(start, end))
     return ", ".join(ranges)
 
 
@@ -53,7 +57,7 @@ def format_report(entries: list[Entry]) -> str:
         )
         if entry.uncovered_lines:
             lines.append(
-                f"  Linhas descobertas: {entry.path}:{_format_line_ranges(entry.uncovered_lines)}"
+                f"  Uncovered lines: {entry.path}:{_format_line_ranges(entry.uncovered_lines)}"
             )
     lines.append("")
     return "\n".join(lines)

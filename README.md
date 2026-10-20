@@ -30,23 +30,28 @@ The first run creates `.venv` and installs the tool. From a project root it walk
 ./crapper --threshold 30                 # exit 2 when the worst score is higher
 ```
 
-## Linhas descobertas
+## Uncovered lines
 
-Com cobertura LCOV, cada função com linhas ou ramos sem execução ganha um detalhe
-logo abaixo da sua linha na tabela:
+With LCOV coverage, each function with unexecuted lines or branches gets a detail
+below its table row:
 
 ```text
-  Linhas descobertas: src/choose.ts:2, 4-5
+  Uncovered lines: src/choose.ts:2, 4-5
 ```
 
-O caminho é relativo à raiz do projeto e os intervalos são inclusivos. O detalhe
-considera registros `DA` sem execução e linhas com algum ramo `BRDA` descoberto
-(`0` ou `-`), mesmo quando a linha foi executada. Só entram registros dentro dos
-limites da função encontrados no fonte; linhas sem registro não são presumidas
-descobertas. Funções totalmente cobertas, sem LCOV correspondente ou analisadas
-com `--no-coverage` não ganham esse detalhe. Outros formatos de cobertura não
-fornecem esses detalhes. Cabeçalho, pontuações, códigos de saída e snapshot EDN
-mantêm o contrato anterior.
+Paths are relative to the project root and ranges are inclusive. Details include
+unexecuted `DA` records and lines with any uncovered `BRDA` branch (`0` or `-`),
+even when the line itself ran. Only records within the function's source span
+are included; lines without records are not assumed to be uncovered. Fully
+covered functions, functions without matching LCOV, and `--no-coverage` runs get
+no detail. Details are only shown when LCOV supplies the function's coverage;
+Go profiles, JaCoCo, and Cloverage HTML do not use LCOV details even when an LCOV
+report is also present. The table header, scores, exit codes, and EDN snapshot
+keep their existing contracts.
+
+Nested functions with their own rows can have overlapping source spans. As with
+Cov%, an uncovered line inside a nested function appears in its own row and in
+every enclosing row whose source span contains that line.
 
 ## Snapshot
 

@@ -420,7 +420,7 @@ def parse_jacoco_index(text: str) -> dict[str, list[JacocoMethod]]:
 
 @dataclass
 class CoverageBundle:
-    lcov: dict[str, dict[int, tuple[int, int]]] = field(default_factory=dict)
+    lcov: dict[str, FileCoverage] = field(default_factory=dict)
     go_profile: dict[str, list[tuple[int, int, int, int]]] | None = None
     jacoco: dict[str, list[JacocoMethod]] | None = None
     form_html: dict[str, dict[int, tuple[int, int]]] = field(default_factory=dict)
@@ -469,12 +469,14 @@ class CoverageBundle:
         return percent_for_range(record, function.start_line, function.end_line)
 
     def uncovered_lines_for(self, function: Function) -> tuple[int, ...]:
+        if function.language in {"java", "go"} or self._html_lines(function.path) is not None:
+            return ()
         record = self._lcov_lines(function.path)
         if record is None:
             return ()
         missed = {
             line
-            for counts in (record, getattr(record, "branches", {}))
+            for counts in (record, record.branches)
             for line, (covered, total) in counts.items()
             if function.start_line <= line <= function.end_line and covered < total
         }
@@ -483,7 +485,7 @@ class CoverageBundle:
     def _html_lines(self, path: str) -> dict[int, tuple[int, int]] | None:
         return _lookup(self.form_html, path, self.source_parts)
 
-    def _lcov_lines(self, path: str) -> dict[int, tuple[int, int]] | None:
+    def _lcov_lines(self, path: str) -> FileCoverage | None:
         return _lookup(self.lcov, path, self.source_parts)
 
 
@@ -522,8 +524,8 @@ def _merge_texts(paths: list[Path]) -> list[str]:
     return texts
 
 
-def _merge_lcov(root: Path) -> dict[str, dict[int, tuple[int, int]]]:
-    merged: dict[str, dict[int, tuple[int, int]]] = {}
+def _merge_lcov(root: Path) -> dict[str, FileCoverage]:
+    merged: dict[str, FileCoverage] = {}
     for text in _merge_texts(_lcov_paths(root)):
         merged.update(parse_lcov(text))
     return merged

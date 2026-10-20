@@ -9,20 +9,13 @@ from crapper.languages import functions_in_file
 from crapper.model import Entry, Function
 
 
-def _coverage(bundle: CoverageBundle | None, function: Function) -> float | None:
-    """Percentage for one function.
-
-    None means coverage was not requested (`--no-coverage`). A function the
-    report does not mention scores 0%, so it sorts with the other scores
-    instead of sinking to the bottom as N/A.
-    """
-
+def _entry(bundle: CoverageBundle | None, function: Function) -> Entry:
     if bundle is None:
-        return None
-    found = bundle.percent_for(function)
-    if found is None:
-        return 0.0
-    return found
+        return make_entry(function, None)
+    coverage = bundle.percent_for(function)
+    if coverage is None:
+        coverage = 0.0
+    return make_entry(function, coverage, bundle.uncovered_lines_for(function))
 
 
 def _source_path(file: Path, root: Path) -> str:
@@ -52,6 +45,5 @@ def analyze_files(
         except ValueError:
             relative = file.as_posix()
         for function in functions_in_file(language, source, relative, str(root)):
-            uncovered = bundle.uncovered_lines_for(function) if bundle is not None else ()
-            entries.append(make_entry(function, _coverage(bundle, function), uncovered))
+            entries.append(_entry(bundle, function))
     return sort_entries(entries)

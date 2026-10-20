@@ -423,9 +423,8 @@ def test_main_exits_with_the_status(monkeypatch):
 
 
 @pytest.mark.parametrize("extension", ["js", "ts", "py"])
-@pytest.mark.parametrize("threshold, expected_status", [("30", 0), ("1", 2)])
 def test_report_lists_uncovered_line_ranges_per_function(
-    tmp_path, capsys, extension, threshold, expected_status
+    tmp_path, capsys, extension
 ):
     source = (
         "def choose(x):\n"
@@ -456,14 +455,10 @@ def test_report_lists_uncovered_line_ranges_per_function(
         "DA:7,1\nDA:8,1\nend_of_record\n",
     )
 
-    assert run([
-        "--root", str(tmp_path), "--use-existing-coverage",
-        "--threshold", threshold,
-    ]) == expected_status
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
     output = capsys.readouterr().out
-    assert f"{'Function':<30} {'Namespace':<35} {'CC':>4} {'Cov%':>7} {'CRAP':>8}" in output
-    details = [line for line in output.splitlines() if "Linhas descobertas:" in line]
-    assert details == [f"  Linhas descobertas: {path}:2, 4-5"]
+    details = [line for line in output.splitlines() if "Uncovered lines:" in line]
+    assert details == [f"  Uncovered lines: {path}:2, 4-5"]
     lines = output.splitlines()
     assert lines[lines.index(details[0]) - 1].startswith("choose ")
 
@@ -482,8 +477,61 @@ def test_report_identifies_lines_with_uncovered_branches(tmp_path, capsys, taken
     assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
     output = capsys.readouterr().out
     if taken == "1":
-        assert "Linhas descobertas:" not in output
-        assert "100.0%" in output
+        assert "Uncovered lines:" not in output
     else:
-        assert "  Linhas descobertas: src/choose.ts:2\n" in output
-        assert "50.0%" in output
+        assert "  Uncovered lines: src/choose.ts:2\n" in output
+
+
+@pytest.mark.parametrize("language, native_report", [
+    ("go", False), ("go", True), ("java", False), ("java", True),
+    ("clojure", True),
+])
+def test_report_ignores_lcov_details_when_another_coverage_source_is_selected(
+    tmp_path, capsys, language, native_report
+):
+    fixtures = {
+        "go": (
+            "main.go", "package demo\nfunc Choose() int { return 1 }\n",
+            "target/coverage/go/coverage.out",
+            "mode: set\nmain.go:2.1,2.40 1 1\n",
+        ),
+        "java": (
+            "Main.java", "public class Main {\n  public int choose() { return 1; }\n}\n",
+            "target/site/jacoco/jacoco.xml",
+            '<report><class name="Main"><method name="choose" line="2">'
+            '<counter type="INSTRUCTION" missed="0" covered="1"/>'
+            '</method></class></report>',
+        ),
+        "clojure": (
+            "main.clj", "(ns demo)\n(defn choose [] 1)\n",
+            "target/coverage/main.clj.html",
+            '<span title="1 out of 1 forms covered">   2&nbsp;</span>',
+        ),
+    }
+    path, source, report_path, report = fixtures[language]
+    _write(tmp_path, path, source)
+    _write(tmp_path, "coverage/lcov.info", f"SF:{path}\nDA:2,0\nend_of_record\n")
+    if native_report:
+        _write(tmp_path, report_path, report)
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_line_details_when_coverage_is_disabled(tmp_path, capsys):
+    _write(tmp_path, "choose.py", "def choose():\n    return 1\n")
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:choose.py\nDA:2,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--no-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_line_details_without_matching_lcov(tmp_path, capsys):
+    _write(tmp_path, "choose.py", "def choose():\n    return 1\n")
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:other.py\nDA:2,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
