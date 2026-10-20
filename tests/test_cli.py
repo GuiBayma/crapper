@@ -463,7 +463,7 @@ def test_report_lists_uncovered_line_ranges_per_function(
     assert lines[lines.index(details[0]) - 1].startswith("choose ")
 
 
-@pytest.mark.parametrize("taken", ["0", "-", "1"])
+@pytest.mark.parametrize("taken", ["0", "-"])
 def test_report_identifies_lines_with_uncovered_branches(tmp_path, capsys, taken):
     _write(
         tmp_path, "src/choose.ts",
@@ -476,10 +476,7 @@ def test_report_identifies_lines_with_uncovered_branches(tmp_path, capsys, taken
     )
     assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
     output = capsys.readouterr().out
-    if taken == "1":
-        assert "Uncovered lines:" not in output
-    else:
-        assert "  Uncovered lines: src/choose.ts:2\n" in output
+    assert "  Uncovered lines: src/choose.ts:2\n" in output
 
 
 @pytest.mark.parametrize("language, native_report", [
@@ -532,6 +529,26 @@ def test_report_omits_line_details_without_matching_lcov(tmp_path, capsys):
     _write(
         tmp_path, "coverage/lcov.info",
         "SF:other.py\nDA:2,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    assert "Uncovered lines:" not in capsys.readouterr().out
+
+
+def test_report_omits_details_when_every_branch_is_covered(tmp_path, capsys):
+    _write(
+        tmp_path, "src/choose.js",
+        "export function choose(x) {\n"
+        "  if (x) x += 1;\n"
+        "  [].map(() => {\n"
+        "    return 0;\n"
+        "  });\n"
+        "  return x;\n"
+        "}\n",
+    )
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:src/choose.js\nDA:1,1\nDA:2,2\nDA:3,1\nDA:4,0\nDA:6,1\n"
+        "BRDA:2,0,0,1\nBRDA:2,0,1,1\nend_of_record\n",
     )
     assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
     assert "Uncovered lines:" not in capsys.readouterr().out

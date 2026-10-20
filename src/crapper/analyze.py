@@ -10,6 +10,8 @@ from crapper.model import Entry, Function
 
 
 def _entry(bundle: CoverageBundle | None, function: Function) -> Entry:
+    """Score unreported functions at 0%, rather than N/A, to sort with scored rows."""
+
     if bundle is None:
         return make_entry(function, None)
     coverage = bundle.percent_for(function)

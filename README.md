@@ -32,16 +32,18 @@ The first run creates `.venv` and installs the tool. From a project root it walk
 
 ## Uncovered lines
 
-With LCOV coverage, each function with unexecuted lines or branches gets a detail
-below its table row:
+With LCOV coverage, each function with uncovered records in its selected coverage
+measure gets a detail below its table row:
 
 ```text
   Uncovered lines: src/choose.ts:2, 4-5
 ```
 
-Paths are relative to the project root and ranges are inclusive. Details include
-unexecuted `DA` records and lines with any uncovered `BRDA` branch (`0` or `-`),
-even when the line itself ran. Only records within the function's source span
+Paths are relative to the project root and ranges are inclusive. Details follow
+the same rule as Cov%: when the function's span has `BRDA` records, only lines with
+an uncovered branch (`0` or `-`) are listed, even if the line itself ran. Otherwise,
+details list unexecuted `DA` records. A line-only miss does not add a detail to a
+function scored from branches. Only records within the function's source span
 are included; lines without records are not assumed to be uncovered. Fully
 covered functions, functions without matching LCOV, and `--no-coverage` runs get
 no detail. Details are only shown when LCOV supplies the function's coverage;
@@ -50,8 +52,9 @@ report is also present. The table header, scores, exit codes, and EDN snapshot
 keep their existing contracts.
 
 Nested functions with their own rows can have overlapping source spans. As with
-Cov%, an uncovered line inside a nested function appears in its own row and in
-every enclosing row whose source span contains that line.
+Cov%, an uncovered record can contribute to both a nested row and enclosing rows.
+Each row applies the branch-first rule within its own span, so their detail sets
+can differ.
 
 ## Snapshot
 
