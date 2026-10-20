@@ -30,6 +30,24 @@ The first run creates `.venv` and installs the tool. From a project root it walk
 ./crapper --threshold 30                 # exit 2 when the worst score is higher
 ```
 
+## Linhas descobertas
+
+Com cobertura LCOV, cada função com linhas ou ramos sem execução ganha um detalhe
+logo abaixo da sua linha na tabela:
+
+```text
+  Linhas descobertas: src/choose.ts:2, 4-5
+```
+
+O caminho é relativo à raiz do projeto e os intervalos são inclusivos. O detalhe
+considera registros `DA` sem execução e linhas com algum ramo `BRDA` descoberto
+(`0` ou `-`), mesmo quando a linha foi executada. Só entram registros dentro dos
+limites da função encontrados no fonte; linhas sem registro não são presumidas
+descobertas. Funções totalmente cobertas, sem LCOV correspondente ou analisadas
+com `--no-coverage` não ganham esse detalhe. Outros formatos de cobertura não
+fornecem esses detalhes. Cabeçalho, pontuações, códigos de saída e snapshot EDN
+mantêm o contrato anterior.
+
 ## Snapshot
 
 `.metrics/crap.edn` has the same shape crap4clj writes:

@@ -468,6 +468,18 @@ class CoverageBundle:
             return branched
         return percent_for_range(record, function.start_line, function.end_line)
 
+    def uncovered_lines_for(self, function: Function) -> tuple[int, ...]:
+        record = self._lcov_lines(function.path)
+        if record is None:
+            return ()
+        missed = {
+            line
+            for counts in (record, getattr(record, "branches", {}))
+            for line, (covered, total) in counts.items()
+            if function.start_line <= line <= function.end_line and covered < total
+        }
+        return tuple(sorted(missed))
+
     def _html_lines(self, path: str) -> dict[int, tuple[int, int]] | None:
         return _lookup(self.form_html, path, self.source_parts)
 

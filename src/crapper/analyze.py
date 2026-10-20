@@ -52,5 +52,6 @@ def analyze_files(
         except ValueError:
             relative = file.as_posix()
         for function in functions_in_file(language, source, relative, str(root)):
-            entries.append(make_entry(function, _coverage(bundle, function)))
+            uncovered = bundle.uncovered_lines_for(function) if bundle is not None else ()
+            entries.append(make_entry(function, _coverage(bundle, function), uncovered))
     return sort_entries(entries)

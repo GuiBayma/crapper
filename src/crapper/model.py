@@ -30,3 +30,4 @@ class Entry:
     crap: float | None
     path: str
     language: str
+    uncovered_lines: tuple[int, ...] = ()

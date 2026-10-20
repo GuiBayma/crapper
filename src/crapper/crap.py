@@ -23,7 +23,9 @@ def round_metric(value: float | None) -> float | None:
     return round(float(value), 4)
 
 
-def make_entry(function: Function, coverage: float | None) -> Entry:
+def make_entry(
+    function: Function, coverage: float | None, uncovered_lines: tuple[int, ...] = ()
+) -> Entry:
     coverage = round_metric(coverage)
     return Entry(
         name=function.name,
@@ -33,6 +35,7 @@ def make_entry(function: Function, coverage: float | None) -> Entry:
         crap=round_metric(crap_score(function.complexity, coverage)),
         path=function.path,
         language=function.language,
+        uncovered_lines=uncovered_lines,
     )
 
 

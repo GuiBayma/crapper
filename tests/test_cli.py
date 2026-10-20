@@ -420,3 +420,70 @@ def test_main_exits_with_the_status(monkeypatch):
         assert exc.code == 4
     else:
         raise AssertionError("main did not exit")
+
+
+@pytest.mark.parametrize("extension", ["js", "ts", "py"])
+@pytest.mark.parametrize("threshold, expected_status", [("30", 0), ("1", 2)])
+def test_report_lists_uncovered_line_ranges_per_function(
+    tmp_path, capsys, extension, threshold, expected_status
+):
+    source = (
+        "def choose(x):\n"
+        "    if x:\n"
+        "        x += 1\n"
+        "        return x\n"
+        "    return 0\n"
+        "\n"
+        "def covered():\n"
+        "    return 1\n"
+    ) if extension == "py" else (
+        "export function choose(x) {\n"
+        "  if (x) {\n"
+        "    x += 1;\n"
+        "    return x;\n"
+        "  } return 0;\n"
+        "}\n"
+        "export function covered() {\n"
+        "  return 1;\n"
+        "}\n"
+    )
+    path = f"src/demo/core.{extension}"
+    _write(tmp_path, path, source)
+    _write(
+        tmp_path, "coverage/lcov.info",
+        f"SF:{path}\nFN:1,choose\nFN:7,covered\n"
+        "DA:99,0\nDA:5,0\nDA:4,0\nDA:3,1\nDA:2,0\nDA:1,1\n"
+        "DA:7,1\nDA:8,1\nend_of_record\n",
+    )
+
+    assert run([
+        "--root", str(tmp_path), "--use-existing-coverage",
+        "--threshold", threshold,
+    ]) == expected_status
+    output = capsys.readouterr().out
+    assert f"{'Function':<30} {'Namespace':<35} {'CC':>4} {'Cov%':>7} {'CRAP':>8}" in output
+    details = [line for line in output.splitlines() if "Linhas descobertas:" in line]
+    assert details == [f"  Linhas descobertas: {path}:2, 4-5"]
+    lines = output.splitlines()
+    assert lines[lines.index(details[0]) - 1].startswith("choose ")
+
+
+@pytest.mark.parametrize("taken", ["0", "-", "1"])
+def test_report_identifies_lines_with_uncovered_branches(tmp_path, capsys, taken):
+    _write(
+        tmp_path, "src/choose.ts",
+        "export function choose(x) {\n  return x ? 1 : 0;\n}\n",
+    )
+    _write(
+        tmp_path, "coverage/lcov.info",
+        "SF:src/choose.ts\nDA:1,1\nDA:2,1\nDA:3,1\n"
+        f"BRDA:2,0,0,1\nBRDA:2,0,1,{taken}\nBRDA:99,0,0,0\nend_of_record\n",
+    )
+    assert run(["--root", str(tmp_path), "--use-existing-coverage"]) == 0
+    output = capsys.readouterr().out
+    if taken == "1":
+        assert "Linhas descobertas:" not in output
+        assert "100.0%" in output
+    else:
+        assert "  Linhas descobertas: src/choose.ts:2\n" in output
+        assert "50.0%" in output

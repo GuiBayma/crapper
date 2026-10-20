@@ -13,6 +13,19 @@ def _format_crap(score: float | None) -> str:
     return f"{score:8.1f}"
 
 
+def _format_line_ranges(lines: tuple[int, ...]) -> str:
+    ranges: list[str] = []
+    start = end = lines[0]
+    for line in lines[1:]:
+        if line == end + 1:
+            end = line
+            continue
+        ranges.append(str(start) if start == end else f"{start}-{end}")
+        start = end = line
+    ranges.append(str(start) if start == end else f"{start}-{end}")
+    return ", ".join(ranges)
+
+
 def format_report(entries: list[Entry]) -> str:
     name_width = 30
     namespace_width = 35
@@ -38,5 +51,9 @@ def format_report(entries: list[Entry]) -> str:
             f"{entry.complexity:4d} {_format_coverage(entry.coverage)} "
             f"{_format_crap(entry.crap)}"
         )
+        if entry.uncovered_lines:
+            lines.append(
+                f"  Linhas descobertas: {entry.path}:{_format_line_ranges(entry.uncovered_lines)}"
+            )
     lines.append("")
     return "\n".join(lines)
